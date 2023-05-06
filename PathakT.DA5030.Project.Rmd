@@ -1,0 +1,1410 @@
+---
+title: "Final Project - Detecting Hepatitis C through ML models"
+author: "Tarishi Pathak"
+date: "2022-12-14"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# install packages and load all the required libraries
+install.packages("CRAN", repos = "http://cran.us.r-project.org")
+install.packages("dplyr", repos = "http://cran.us.r-project.org")
+install.packages("caret", repos = "http://cran.us.r-project.org")
+install.packages("knitr", repos = "http://cran.us.r-project.org")
+install.packages("rmarkdown", repos = "http://cran.us.r-project.org")
+install.packages("psych", repos = "http://cran.us.r-project.org")
+install.packages("randomForest",repos = "http://cran.us.r-project.org")
+install.packages("ROSE", repos = "http://cran.us.r-project.org")
+install.packages("corrplot", repos = "http://cran.us.r-project.org")
+install.packages("nnet", repos = "http://cran.us.r-project.org")
+install.packages("pROC", repos = "http://cran.us.r-project.org")
+install.packages("modelr", repos = "http://cran.us.r-project.org")
+install.packages("ipred", repos = "http://cran.us.r-project.org")
+install.packages("ggplot2", repos = "http://cran.us.r-project.org")
+install.packages("klaR", repos = "http://cran.us.r-project.org")
+install.packages("C50", repos = "http://cran.us.r-project.org")
+install.packages("kernlab", repos = "http://cran.us.r-project.org")
+install.packages("rsample", repos = "http://cran.us.r-project.org")
+install.packages("class", repos = "http://cran.us.r-project.org")
+install.packages("corrplot", repos = "http://cran.us.r-project.org")
+
+library(stats)
+library(ggplot2)
+library(dplyr)
+library(caret)
+library(rsample)
+library(class)
+library(klaR)
+library(psych)
+library(ggpubr)
+library(ROSE)
+library(randomForest)
+library(kernlab)
+library(C50)
+library(corrplot)
+library(nnet)
+library(pROC)
+library(modelr)
+library(ipred)
+```
+
+
+# Data Acquisition
+
+The dataset for this project is acquired from the UCI ML's repository by reading
+the csv from the respective URL and assigning it to the variable hcv_set.
+We also removed the first column since that was a serial number column since that 
+didn't add to the learning.
+
+In this dataset, 'Category' column is our target variable and the other columns 
+will be our features. We will be condensing our category to have two classes, 0
+for normal and 1 for HCV positive. The features are age and other biomarkers.
+
+
+```{r}
+# loading the dataset
+hcv_set <- read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/00571/hcvdat0.csv")
+
+# removing column X since that is just serial number
+hcv_set <- hcv_set[-1]
+
+# looking at the summary of the data
+summary(hcv_set)
+
+# data frame structure
+str(hcv_set)
+```
+
+
+
+# Data Exploration
+
+## Exploratory data plots
+
+```{r}
+# histograms to check the distribution of the continuous variable
+alb <- ggplot(hcv_set, aes(ALB)) +
+  geom_histogram(aes(y = after_stat(density)), fill='lightgray', col='black') + 
+  labs(x='ALB',
+       y= 'Frequency') 
+
+alp <- ggplot(hcv_set, aes(ALP)) +
+  geom_histogram(aes(y = after_stat(density)), fill='lightgray', col='black') + 
+  labs(x='ALP',
+       y= 'Frequency') 
+
+alt <- ggplot(hcv_set, aes(ALT)) +
+  geom_histogram(aes(y = after_stat(density)), fill='lightgray', col='black') + 
+  labs(x='ALT',
+       y= 'Frequency') 
+
+ast <- ggplot(hcv_set, aes(AST)) +
+  geom_histogram(aes(y = after_stat(density)), fill='lightgray', col='black') + 
+  labs(x='AST',
+       y= 'Frequency') 
+
+bil <- ggplot(hcv_set, aes(BIL)) +
+  geom_histogram(aes(y = after_stat(density)), fill='lightgray', col='black') + 
+  labs(x='BIL',
+       y= 'Frequency') 
+
+che <- ggplot(hcv_set, aes(CHE)) +
+  geom_histogram(aes(y = after_stat(density)), fill='lightgray', col='black') + 
+  labs(x='CHE',
+       y= 'Frequency') 
+
+chol <- ggplot(hcv_set, aes(CHOL)) +
+  geom_histogram(aes(y = after_stat(density)), fill='lightgray', col='black') + 
+  labs(x='CHOL',
+       y= 'Frequency') 
+
+crea <- ggplot(hcv_set, aes(CREA)) +
+  geom_histogram(aes(y = after_stat(density)), fill='lightgray', col='black') + 
+  labs(x='CREA',
+       y= 'Frequency') 
+
+ggt <- ggplot(hcv_set, aes(GGT)) +
+  geom_histogram(aes(y = after_stat(density)), fill='lightgray', col='black') + 
+  labs(x='GGT',
+       y= 'Frequency') 
+
+prot <- ggplot(hcv_set, aes(PROT)) +
+  geom_histogram(aes(y = after_stat(density)), fill='lightgray', col='black') + 
+  labs(x='PROT',
+       y= 'Frequency') 
+
+ggarrange(alb, alp, alt, ast, bil, che, chol, crea, ggt, prot,
+          ncol = 5, nrow = 2)
+```
+
+From the histograms, we can see that ALP, ALT, AST, BIL, CREA and GGT columns 
+are right skewed, which means that the data is unpredictable and the tail region 
+might be outliers. So we will be normalizing and transforming these columns later 
+to get a more symmetrical distribution.
+
+
+```{r}
+# bar plot distribution of nominal categorical variable - 'Sex' column
+hcv_set %>% ggplot(aes(Sex, fill=Sex)) + geom_bar()
+```
+
+For the nominal categorical column 'Sex', we can see from the bar plot 
+distribution that the number of males are more than the number of females for 
+this dataset.
+
+
+```{r}
+# bar plot distribution for the target variable - 'Category' column
+hcv_set %>% ggplot(aes(Category, fill=Category)) + geom_bar()
+```
+
+As we can see in the bar plot of the target variable, the category of blood donors
+that don't have any liver disease is really high compared to other classes. 
+This would lead to bias towards one class. So, we will be oversampling the data 
+later to increase the minority class.
+
+
+Now, we'll look at the boxplots for all the continuous features to detect the
+outliers.
+
+```{r}
+# Detecting outliers for continuous features with boxplots
+boxplot(hcv_set$ALB, main="ALB outliers")
+boxplot(hcv_set$ALP, main="ALP outliers")
+boxplot(hcv_set$ALT, main="ALT outliers")
+boxplot(hcv_set$AST, main="AST outliers")
+boxplot(hcv_set$BIL, main="BIL outliers")
+boxplot(hcv_set$CHE, main="CHE outliers")
+boxplot(hcv_set$CHOL, main="CHOL outliers")
+boxplot(hcv_set$CREA, main="CREA outliers")
+boxplot(hcv_set$GGT, main="GGT outliers")
+boxplot(hcv_set$PROT, main="PROT outliers")
+```
+
+```{r}
+# detecting outliers in  the continuous variable with q-q plots 
+ggplot(hcv_set, aes(sample = ALB)) + stat_qq() + stat_qq_line() + 
+  labs(title = "ALB")
+ggplot(hcv_set, aes(sample = ALP)) + stat_qq() + stat_qq_line() + 
+  labs(title = "ALP")
+ggplot(hcv_set, aes(sample = ALT)) + stat_qq() + stat_qq_line() + 
+  labs(title = "ALT")
+ggplot(hcv_set, aes(sample = AST)) + stat_qq() + stat_qq_line() + 
+  labs(title = "AST")
+ggplot(hcv_set, aes(sample = BIL)) + stat_qq() + stat_qq_line() +
+  labs(title = "BIL")
+ggplot(hcv_set, aes(sample = CHE)) + stat_qq() + stat_qq_line() +
+  labs(title = "CHE")
+ggplot(hcv_set, aes(sample = CHOL)) + stat_qq() + stat_qq_line() +
+  labs(title = "CHOL")
+ggplot(hcv_set, aes(sample = CREA)) + stat_qq() + stat_qq_line() +
+  labs(title = "CREA")
+ggplot(hcv_set, aes(sample = GGT)) + stat_qq() + stat_qq_line() +
+  labs(title = "GGT")
+ggplot(hcv_set, aes(sample = PROT)) + stat_qq() + stat_qq_line() +
+  labs(title = "PROT")
+```
+
+Through the boxplots, which shows the distribution based on the minimum, maximum,
+median, first and third quartile, and the q-q plots, which shows if the columns 
+follow a normal distribution, we can see that the columns of continuous 
+features contain outliers. So, we will need to handle the outliers in order to 
+get a more normal distribution and less bias towards one class.
+
+
+## Chi -square analysis
+
+```{r}
+# chi-square test for response variable and the variable
+chisq.test(table(hcv_set$Category, hcv_set$Age))
+chisq.test(table(hcv_set$Category, hcv_set$ALB))
+chisq.test(table(hcv_set$Category, hcv_set$ALP))
+chisq.test(table(hcv_set$Category, hcv_set$ALT))
+chisq.test(table(hcv_set$Category, hcv_set$AST))
+chisq.test(table(hcv_set$Category, hcv_set$BIL))
+chisq.test(table(hcv_set$Category, hcv_set$CHE))
+chisq.test(table(hcv_set$Category, hcv_set$CHOL))
+chisq.test(table(hcv_set$Category, hcv_set$CREA))
+chisq.test(table(hcv_set$Category, hcv_set$GGT))
+chisq.test(table(hcv_set$Category, hcv_set$PROT))
+chisq.test(table(hcv_set$Category, hcv_set$Sex))
+```
+
+The chi-square analysis shows that all of the columns except for 'Sex' column are
+independent of the target variable, which is the 'Category' column because the
+p-value is higher than the threshold of 0.05 for the 'Sex' column, which means 
+that we can reject the null hypothesis that the two features are independent.
+Since we need features that we can learn from we will be removing that column 
+before doing any model construction and analysis.
+
+```{r}
+# removing the 'sex' column because it is not independent 
+hcv_set <- hcv_set[-3]
+```
+
+
+
+# Data Cleaning and Shaping
+
+Before we perform any pre-processing, we will be splitting the data into train 
+and validation subsets first, so that there isn't any information leaking from 
+validation set into the train set while we perform pre -processing.
+
+```{r}
+# setting the seed
+set.seed(101)
+
+# creating a random sample to split 70% data for training and 30% for validation
+# while taking the ratio of the categories in the target variable
+sample_set<- createDataPartition(hcv_set$Category, p=0.7, list=F)
+
+# creating training and validation datasets 
+train_data <- hcv_set[sample_set,]
+validation_data <- hcv_set[-sample_set,]
+
+# Comparing the target variable distribution between the train and validation
+# data
+train_data %>% group_by(Category) %>% summarise(rows=length(Category))
+validation_data %>% group_by(Category) %>% summarise(rows=length(Category))
+
+```
+
+
+## Identification and imputation of missing data
+
+```{r}
+# checking for any NA values in all of the columns
+colSums(is.na(train_data))
+
+# imputing missing values with median of the column by category. e.g. NA values 
+# in ALP column will be substituted by median values of ALP by each category in the
+# Category column.
+# imputing with median is more robust since the data is skewed and has a lot of 
+# outliers
+train_data$ALB[is.na(train_data$ALB)] <- median(train_data$ALB, na.rm = T)
+train_data$ALP[is.na(train_data$ALP)] <- median(train_data$ALP, na.rm = T)
+train_data$ALT[is.na(train_data$ALT)] <- median(train_data$ALT, na.rm = T)
+train_data$CHOL[is.na(train_data$CHOL)] <- median(train_data$CHOL, na.rm = T)
+train_data$PROT[is.na(train_data$PROT)] <- median(train_data$PROT, na.rm = T)
+
+# imputing NA in validation set
+validation_data$ALB[is.na(validation_data$ALB)] <- median(validation_data$ALB,
+                                                          na.rm = T)
+validation_data$ALP[is.na(validation_data$ALP)] <- median(validation_data$ALP, 
+                                                          na.rm = T)
+validation_data$ALT[is.na(validation_data$ALT)] <- median(validation_data$ALT, 
+                                                          na.rm = T)
+validation_data$CHOL[is.na(validation_data$CHOL)] <- median(validation_data$CHOL, 
+                                                            na.rm = T)
+validation_data$PROT[is.na(validation_data$PROT)] <- median(validation_data$PROT,
+                                                            na.rm = T)
+```
+
+
+### Dummy coding for Category
+
+In the column 'category', 0=Blood Donor and 0s=Blood Donor are normal blood 
+donors, while 1=Hepatitis, 2=Fibrosis, 3=Cirrhosis are all patients at 
+different stages of HCV. Since this project just predicts whether a patient has
+HCV or not, we will be encoding 0 for normal and 1 for HCV positive.
+
+```{r}
+# dummy coding for the categorical features - 'Category' column
+train_data$Category <- factor(ifelse(train_data$Category == "0=Blood Donor", 0,
+                               ifelse(train_data$Category == "0s=Blood Donor",0,
+                                ifelse(train_data$Category == "1=Hepatitis", 1,
+                                ifelse(train_data$Category == "2=Fibrosis", 1,
+                                ifelse(train_data$Category == "3=Cirrhosis", 1,0))))))
+
+# encoding for categorical features in validation data
+validation_data$Category <- factor(ifelse(validation_data$Category == "0=Blood Donor", 0,
+                               ifelse(validation_data$Category == "0s=Blood Donor",0,
+                                ifelse(validation_data$Category == "1=Hepatitis", 1,
+                                ifelse(validation_data$Category == "2=Fibrosis", 1,
+                                ifelse(validation_data$Category == "3=Cirrhosis",
+                                       1,0))))))
+
+# bar plot distribution for the target variable - 'Category' column
+train_data %>% ggplot(aes(Category, fill=Category)) + geom_bar()
+validation_data %>% ggplot(aes(Category, fill=Category)) + geom_bar()
+```
+
+
+## Treating outliers in continuous features
+
+The boxplots and q-q plots above show the outliers in the the continuous features.
+Since removing all of the outliers would significantly decrease our dataset,
+we will be flooring the value at the 5th and capping it at the 95th percentile 
+for each column of the train and validation sets
+
+```{r}
+# checking stats for the train dataset
+summary(train_data)
+
+# treating outliers in continuous features by flooring values at 5th and capping 
+# at 95th percentile
+quantile(train_data$ALB,seq(0,1,0.01))
+train_data$ALB[which(train_data$ALB<31.730)] <- 31.730
+train_data$ALB[which(train_data$ALB>48.845)] <- 48.845
+
+quantile(train_data$ALP,seq(0,1,0.01))
+train_data$ALP[which(train_data$ALP<36.610)] <- 36.610
+train_data$ALP[which(train_data$ALP>102.900 )] <- 102.900 
+
+quantile(train_data$ALT,seq(0,1,0.01))
+train_data$ALT[which(train_data$ALT<8.465)] <- 8.465 
+train_data$ALT[which(train_data$ALT>63.035 )] <- 63.035 
+
+quantile(train_data$AST,seq(0,1,0.01))
+train_data$AST[which(train_data$AST<16.755)] <- 16.755 
+train_data$AST[which(train_data$AST>86.605 )] <- 86.605 
+
+quantile(train_data$BIL,seq(0,1,0.01))
+train_data$BIL[which(train_data$BIL<3.000)] <- 3.000  
+train_data$BIL[which(train_data$BIL>22.270 )] <- 22.270  
+
+quantile(train_data$CHE,seq(0,1,0.01))
+train_data$CHE[which(train_data$CHE<4.6795)] <- 4.6795
+train_data$CHE[which(train_data$CHE> 11.6735 )] <- 11.6735 
+
+quantile(train_data$CHOL,seq(0,1,0.01))
+train_data$CHOL[which(train_data$CHOL<3.6575)] <- 3.6575   
+train_data$CHOL[which(train_data$CHOL>7.1650)] <- 7.1650
+
+quantile(train_data$CREA,seq(0,1,0.01))
+train_data$CREA[which(train_data$CREA<55.000)] <- 55.500 
+train_data$CREA[which(train_data$CREA>106.000)] <- 106.000 
+
+quantile(train_data$GGT,seq(0,1,0.01))
+train_data$GGT[which(train_data$GGT<10.400)] <- 10.400   
+train_data$GGT[which(train_data$GGT>102.850)] <- 102.850 
+
+quantile(train_data$PROT,seq(0,1,0.01))
+train_data$PROT[which(train_data$PROT<63.265)] <- 63.265 
+train_data$PROT[which(train_data$PROT>80.600)] <- 80.600
+```
+
+```{r}
+# treating outliers in continuous features by flooring values at 5th and capping 
+# at 95th percentile for validation data
+quantile(validation_data$ALB,seq(0,1,0.01))
+validation_data$ALB[which(validation_data$ALB<33.730)] <- 33.730
+validation_data$ALB[which(validation_data$ALB>49.000)] <- 49.000
+
+quantile(validation_data$ALP,seq(0,1,0.01))
+validation_data$ALP[which(validation_data$ALP<38.340)] <- 38.340
+validation_data$ALP[which(validation_data$ALP>105.890 )] <- 105.890 
+
+quantile(validation_data$ALT,seq(0,1,0.01))
+validation_data$ALT[which(validation_data$ALT<9.220)] <-9.220
+validation_data$ALT[which(validation_data$ALT>58.960)] <- 58.960
+
+quantile(validation_data$AST,seq(0,1,0.01))
+validation_data$AST[which(validation_data$AST<16.660)] <- 16.660
+validation_data$AST[which(validation_data$AST>94.860)] <- 94.860
+
+quantile(validation_data$BIL,seq(0,1,0.01))
+validation_data$BIL[which(validation_data$BIL<3.000)] <- 3.000  
+validation_data$BIL[which(validation_data$BIL>30.900)] <- 30.900 
+
+quantile(validation_data$CHE,seq(0,1,0.01))
+validation_data$CHE[which(validation_data$CHE<4.3430)] <- 4.3430
+validation_data$CHE[which(validation_data$CHE> 10.8780 )] <- 10.8780
+
+quantile(validation_data$CHOL,seq(0,1,0.01))
+validation_data$CHOL[which(validation_data$CHOL<3.6270)] <- 3.6270   
+validation_data$CHOL[which(validation_data$CHOL>7.2990)] <- 7.2990
+
+quantile(validation_data$CREA,seq(0,1,0.01))
+validation_data$CREA[which(validation_data$CREA<60.500)] <- 60.500 
+validation_data$CREA[which(validation_data$CREA>106.940)] <- 106.940 
+
+quantile(validation_data$GGT,seq(0,1,0.01))
+validation_data$GGT[which(validation_data$GGT<10.200)] <- 10.200   
+validation_data$GGT[which(validation_data$GGT>114.610)] <- 114.610 
+
+quantile(validation_data$PROT,seq(0,1,0.01))
+validation_data$PROT[which(validation_data$PROT<64.310)] <- 64.310 
+validation_data$PROT[which(validation_data$PROT>78.880)] <- 78.880
+
+```
+
+
+## Normalizing continuous features with min-max 
+
+Next we will be normalizing our train and test sets with a min max scaling,
+which scales the train data values to be in the range of -1 to 1, and then
+scales the validation data values to be in the range of the minimum and maximum
+of the train data values.
+
+We're normalizing our continuous features because a normal distribution matters
+especially for distance based algorithms such as SVM and neural networks, two out
+of three of our chosen algorithms.
+
+```{r}
+# Creating function for normalizing the data between -1 to 1.
+min_max_scaling <- function(train, test) {
+  min_vals <- sapply(train, min)
+  range1 <- sapply(train, function(x)
+    diff(range(x)))
+  # scale the training data
+  
+  train_scaled <-
+    data.frame(matrix(nrow = nrow(train), ncol = ncol(train)))
+  
+  for (i in seq_len(ncol(train))) {
+    column <- (train[, i] - min_vals[i]) / range1[i]
+    train_scaled[i] <- column
+  }
+  
+  colnames(train_scaled) <- colnames(train)
+  
+  # scale the testing data using the min and range of the train data
+  
+  test_scaled <-
+    data.frame(matrix(nrow = nrow(test), ncol = ncol(test)))
+  
+  for (i in seq_len(ncol(test))) {
+    column <- (test[, i] - min_vals[i]) / range1[i]
+    test_scaled[i] <- column
+  }
+  
+  colnames(test_scaled) <- colnames(test)
+  
+  return(list(train = train_scaled, test = test_scaled))
+}
+
+# Subsetting the train and test data without categorical data
+df2 <- subset(train_data, select = c("ALB", "ALP", "ALT", "AST", "BIL", "CHE", 
+                                     "CHOL", "CREA","GGT", "PROT"))
+df2_test <- subset(validation_data, select = c("ALB", "ALP", "ALT", "AST", "BIL", 
+                                         "CHE", "CHOL", "CREA", "GGT", "PROT"))
+
+# Normalizing the train and test data 
+norm_data <- min_max_scaling(df2, df2_test)
+
+# Defining train and test data after normalization and merging dataset for 
+# making final datasets
+train_data_norm <- norm_data$train
+validation_data_norm <- norm_data$test
+
+train_data_norm <- cbind(subset(train_data,select=c("Category", "Age")),
+                         train_data_norm)
+validation_data_norm <- cbind( subset(validation_data,select=c("Category","Age")),
+                               validation_data_norm)
+
+```
+
+
+To correct the right skew in some of the columns we will use the cube root
+transformation. This transformation is better since those columns contain 
+negative and 0 values in addition to positive values. We're transforming our data
+to be normally distributed so that there isn't bias towards a range of values
+that we end up training more than the other values of the feature.
+
+
+```{r}
+# cube root transformation to adjust distribution of continuous features that are 
+# still skewed after normalization for train and validation sets - ALT, AST, BIL
+# GGT
+CubeRoot<-function(x){
+   sign(x)*abs(x)^(1/3)
+}
+train_data_norm$ALT <- CubeRoot(train_data_norm$ALT)
+train_data_norm$AST <- CubeRoot(train_data_norm$AST) 
+train_data_norm$BIL <- CubeRoot(train_data_norm$BIL) 
+train_data_norm$GGT <- CubeRoot(train_data_norm$GGT) 
+
+validation_data_norm$ALT <- CubeRoot(validation_data_norm$ALT) 
+validation_data_norm$AST <- CubeRoot(validation_data_norm$AST) 
+validation_data_norm$BIL <- CubeRoot(validation_data_norm$BIL) 
+validation_data_norm$GGT <- CubeRoot(validation_data_norm$GGT) 
+
+```
+
+
+```{r}
+# checking histograms and correlation for the columns in both train data and
+# validation data
+pairs.panels(train_data_norm)
+pairs.panels(validation_data_norm)
+```
+
+The histogram from pairs.panels shows us that by performing normalizations and 
+square root transformation the continuous features mostly have a more normalized
+distribution.
+
+The pairs.panels also shows that some of the features might be highly correlated
+which can lead to multicollinearity between the predictors. So, we will be 
+performing principal component analysis of the continuous features to understand
+the variation between the features, and then a correlation matrix to support our
+claim.
+
+
+## Identification of principal components
+
+```{r}
+# PCA on continuous features to identify principal components
+PCA <- princomp(train_data_norm[3:12])
+summary(PCA)
+
+# loadings of components
+PCA$loadings
+
+# visualizing the components and variance
+screeplot(PCA, type = 'lines', main='Scree plot of components')
+
+# biplot
+biplot(PCA, cex=0.5)
+```
+
+From the summary and the scree plot, it can be said that almost 40% of the 
+variance is in component 1, and the first two components explain the most 
+variance, with CHOL, ALB, CHE and PROT all positively correlated to component 
+1. Since we don't have uncorrelated variables we won't be performing dimension
+reductionality.
+
+
+## Correlation analysis
+
+```{r}
+# creating the correlation matrix for the normalized train data with the pearson
+# method 
+train_data_cor <- train_data_norm
+train_data_cor$Category <- as.double(train_data_cor$Category)
+train_data_cor$Age <- as.double(train_data_cor$Age)
+matrix <- cor(train_data_cor, method = "pearson")
+
+corrplot(matrix, method = 'circle', order = 'FPC',type = 'lower')
+```
+
+Since all of the features aren't that highly correlated, we will be keeping all
+the features to create our models.
+
+
+### feature engineering 
+
+To simplify our data for the 'Age' column, we will be performing binning on the 
+data, and bin them by the decade. eg. 25, 27 or 29 would go in the bin 20, while
+65, 62 would go in the bin 60. This would help reduce the cardinality of the data 
+by reducing the number of distinct values and introducing non-linearity
+
+```{r}
+# creating equal width bins for age to convert continuous features into 
+# categorical features by binning for train and validation sets
+range(train_data_norm$Age)
+train_data_norm$Age <- cut(train_data_norm$Age, 
+                      breaks = c(10,19,29,39,49,59,69,79), 
+                      include.lowest=TRUE,
+                      labels=c(10,20,30,40,50,60,70))
+
+range(validation_data_norm$Age)
+validation_data_norm$Age <- cut(validation_data_norm$Age, 
+                      breaks = c(10,19,29,39,49,59,69,79), 
+                      include.lowest=TRUE,
+                      labels=c(10,20,30,40,50,60,70))
+```
+
+
+Since our minority class (1 - Hepatitis C positive) is very low compared to the
+other class (0-normal), we will be oversampling our data to deal with the class 
+imbalance in the train data
+
+```{r}
+# oversampling of train data by ROSE method
+train_over <- ROSE(Category ~ ., data = train_data_norm, seed = 1)$data
+prop.table(table(train_over$Category))
+```
+
+
+# Model Construction
+
+For my models, I have chosen to work with Random Forests, Decision Trees (C5.0),
+Artificial Neural Networks (nnet), and then Support Vector Machines (ksvm) with
+linear and radial kernel. After evaluating the metrics of all of the models,
+I decided to go ahead with Random Forest, SVM radial kernel and ANN since we had
+to pick 3 models to do analysis on and these ones ended up performing better 
+than the other ones in the same ML category.
+
+I chose these models because they are algorithms that prioritize high accuracy
+for predicting classes. The metrics chosen were Accuracy, Precision, Recall, ROC
+and AUC because these are metrics for evaluating classification models.
+
+- Random forests are accurate, overcome over-fitting problems and is great for 
+large datasets. Even though we have removed outliers and missing values, random 
+forests are really good at handling those. 
+
+- SVMs are really well suited for binary classification and is relatively more
+memory efficient.
+
+- ANNs are very adaptable because once trained  they can produce output even with
+incomplete information, and is effective in filtering noise in the data.
+
+## Model A - Decision Tree
+
+### Random Forest
+
+```{r}
+#setting seed
+set.seed(101)
+
+train_over$Category <- as.factor(train_over$Category)
+train_over$Age <- as.factor(train_over$Age)
+
+# building the random forest model, which is a decision tree ensemble model 
+rf_model <- randomForest(Category ~ Age +  ALB + ALP + ALT + AST + BIL + CHE +
+                           CHOL + CREA + GGT +PROT,
+                         data=train_over)
+
+# Predict the test data
+pred_rf <- predict(rf_model, newdata = validation_data_norm)
+
+# confusion matrix
+cm_rf <- confusionMatrix(reference=as.factor(validation_data_norm$Category),
+                      data=as.factor(pred_rf), mode = "everything",positive='1')
+cm_rf
+
+# ROC
+roc_rf <- roc(as.numeric(pred_rf),as.numeric(validation_data_norm$Category))
+
+# AUC 
+auc_rf <- auc(as.numeric(pred_rf),
+                      as.numeric(validation_data_norm$Category))
+```
+
+
+### C5.0
+
+```{r}
+# creating a Decision Tree model from rpart package to predict the 
+# target variable and then visualizing it
+set.seed(101)
+c50_model <- C5.0(Category ~ Age + ALB + ALP + ALT + AST + BIL + CHE +
+                           CHOL + CREA + GGT +PROT,
+                         data=train_over)
+
+# Predict the test data
+pred_tree <- predict(c50_model, newdata = validation_data_norm)
+
+# confusion matrix
+cm_tree <- confusionMatrix(reference=as.factor(validation_data_norm$Category),
+                    data=as.factor(pred_tree), mode = "everything",positive='1')
+cm_tree
+
+# ROC
+roc_tree <- roc(as.numeric(pred_tree),
+                      as.numeric(validation_data_norm$Category))
+
+# AUC 
+auc_tree <- auc(as.numeric(pred_tree),
+                      as.numeric(validation_data_norm$Category))
+```
+
+
+## Model B - Support Vector Machine
+
+### Linear Kernel
+
+```{r}
+#setting seed
+set.seed(101)
+
+# creating a linear SVM classifier where we are specifying the kernel by
+# using linear basis kernel setting
+svm_classifier_linear <- ksvm(Category ~ Age + ALB + ALP + ALT + AST + BIL + CHE +
+                           CHOL + CREA + GGT +PROT,
+                         data=train_over, kernel="vanilladot")
+
+# Predicting using the test data
+svm_pred_linear <- predict(svm_classifier_linear, newdata = validation_data_norm)
+
+# Confusion matrix 
+cm_svm_linear <- confusionMatrix(reference=as.factor(validation_data_norm$Category),
+              data=as.factor(svm_pred_linear), mode = "everything",positive='1')
+
+cm_svm_linear
+
+# ROC
+roc_svm_linear <- roc(as.numeric(svm_pred_linear),
+                      as.numeric(validation_data_norm$Category))
+
+# AUC 
+auc_svm_linear <- auc(as.numeric(svm_pred_linear),
+                      as.numeric(validation_data_norm$Category))
+```
+
+
+### Radial kernel
+
+```{r}
+# creating a linear SVM classifier where we are specifying the kernel by
+# using Gaussian radial basis kernel setting
+set.seed(101)
+svm_classifier_radial <- ksvm(Category ~ Age + ALB + ALP + ALT + AST + BIL + CHE +
+                           CHOL + CREA + GGT +PROT,
+                         data=train_over, kernel="rbfdot", scale=T)
+
+# Predicting using the test data
+svm_pred_radial <- predict(svm_classifier_radial, newdata = validation_data_norm)
+
+# Confusion matrix 
+cm_svm_radial <- confusionMatrix(reference=as.factor(validation_data_norm$Category),
+              data=as.factor(svm_pred_radial), mode = "everything",positive='1')
+
+cm_svm_radial
+
+# ROC
+roc_svm_radial <- roc(as.numeric(svm_pred_radial),
+                      as.numeric(validation_data_norm$Category))
+
+# AUC 
+auc_svm_radial <- auc(as.numeric(svm_pred_radial),
+                      as.numeric(validation_data_norm$Category))
+```
+
+
+## Model C - Artificial Neural Networks
+
+```{r}
+# creating a ANN model by using nnet package on train_over data
+set.seed(101)
+
+ann_model <- nnet(Category ~ ALB + ALP + ALT + AST + BIL + CHE +
+                           CHOL + CREA + GGT +PROT, data = train_over, size=10)
+ann_model
+
+# predict class on validation data
+pred_nnet <- predict(ann_model, validation_data_norm[-1], type="class")
+
+# confusion matrix
+cm_nnet <- confusionMatrix(factor(pred_nnet),validation_data_norm$Category, 
+                           mode = "everything",positive='1')
+cm_nnet
+
+# ROC
+roc_nnet <- roc(as.numeric(pred_nnet), as.numeric(validation_data_norm$Category))
+
+# AUC 
+auc_nnet <- auc(as.numeric(pred_nnet), as.numeric(validation_data_norm$Category))
+
+```
+
+
+```{r}
+# data frame of metrics for the all the models
+model_data <- data.frame('Model'= c('Random Forest','C5.0','Linear SVM',
+                                  'Radial SVM', 'ANN'),
+                      'Accuracy' = c(cm_rf$overall['Accuracy'],
+                                     cm_tree$overall['Accuracy'],
+                                     cm_svm_linear$overall['Accuracy'],
+                                     cm_svm_radial$overall['Accuracy'], 
+                                   cm_nnet$overall["Accuracy"]),
+                      'Precision' = c(cm_rf$byClass['Precision'],
+                                     cm_tree$byClass['Precision'],
+                                     cm_svm_linear$byClass['Precision'],
+                                     cm_svm_radial$byClass['Precision'], 
+                                   cm_nnet$byClass["Precision"]),
+                      'Recall' = c(cm_rf$byClass['Recall'],
+                                     cm_tree$byClass['Recall'],
+                                     cm_svm_linear$byClass['Recall'],
+                                     cm_svm_radial$byClass['Recall'], 
+                                   cm_nnet$byClass["Recall"]),
+                      'F1-score' = c(cm_rf$byClass['F1'],
+                                     cm_tree$byClass['F1'],
+                                     cm_svm_linear$byClass['F1'],
+                                     cm_svm_radial$byClass['F1'], 
+                                   cm_nnet$byClass["F1"]),
+                      'AUC' = c(auc_rf, auc_tree, auc_svm_linear, auc_svm_radial,
+                                auc_nnet))
+model_data
+
+```
+
+After seeing the accuracy rates, F1-scores, precision and recall of all the 
+models, we have decided to go ahead with the highest metric models from each 
+type of ML algorithm, since we had to pick 3 models to do our analysis on. 
+Therefore, we will be doing further analysis on Random Forest model, ANN model,
+and SVM radial model.
+
+
+# Model Evaluation
+
+## Holdout method
+
+Our original method of building our model above followed the holdout method for
+model evaluation, which entailed splitting the data into training and validation
+datasets, pre-processing and then training our models. The maximum data always 
+goes to the training dataset and then the rest to the validation. The aim of 
+this method is to select the best model based on the accuracy.
+
+According to this method of evaluation, the SVM model with the radial kernel
+had the highest accuracy of 96.17% , highest precision of 97.5%, highest recall
+of 98% and highest F1 of 97.8% and an AUC of 91.62
+
+
+## K-fold cross validation
+
+Since initially we had split our data and then pre processed, for k-fold cross
+validation, we will be pre-processing our entire dataset and then perform the
+cross validation process
+
+```{r}
+# imputing with median is more robust since the data is skewed and has a lot of 
+# outliers
+ hcv_set$ALB[is.na( hcv_set$ALB)] <- median( hcv_set$ALB, na.rm = T)
+ hcv_set$ALP[is.na( hcv_set$ALP)] <- median( hcv_set$ALP, na.rm = T)
+ hcv_set$ALT[is.na( hcv_set$ALT)] <- median( hcv_set$ALT, na.rm = T)
+ hcv_set$CHOL[is.na( hcv_set$CHOL)] <- median( hcv_set$CHOL, na.rm = T)
+ hcv_set$PROT[is.na( hcv_set$PROT)] <- median( hcv_set$PROT, na.rm = T)
+ 
+ # encoding for categorical features in validation data
+  hcv_set$Category <- factor(ifelse( hcv_set$Category == "0=Blood Donor", 0,
+                               ifelse( hcv_set$Category == "0s=Blood Donor",0,
+                                ifelse( hcv_set$Category == "1=Hepatitis", 1,
+                                ifelse( hcv_set$Category == "2=Fibrosis", 1,
+                                ifelse( hcv_set$Category == "3=Cirrhosis", 1,0))))))
+ 
+ # treating outliers in continuous features by flooring values at 5th and capping 
+# at 95th percentile
+quantile( hcv_set$ALB,seq(0,1,0.01))
+ hcv_set$ALB[which( hcv_set$ALB<32.280)] <- 32.280
+ hcv_set$ALB[which( hcv_set$ALB>48.930)] <- 48.930
+
+quantile( hcv_set$ALP,seq(0,1,0.01))
+ hcv_set$ALP[which( hcv_set$ALP<37.070)] <- 37.070
+ hcv_set$ALP[which( hcv_set$ALP>103.510 )] <- 103.510
+
+quantile( hcv_set$ALT,seq(0,1,0.01))
+ hcv_set$ALT[which( hcv_set$ALT<8.510)] <- 8.510 
+ hcv_set$ALT[which( hcv_set$ALT>62.030 )] <- 62.030 
+
+quantile( hcv_set$AST,seq(0,1,0.01))
+ hcv_set$AST[which( hcv_set$AST<16.670)] <- 16.670 
+ hcv_set$AST[which( hcv_set$AST>91.840 )] <- 91.840 
+
+quantile( hcv_set$BIL,seq(0,1,0.01))
+ hcv_set$BIL[which( hcv_set$BIL<3.000)] <- 3.000  
+ hcv_set$BIL[which( hcv_set$BIL>24.030 )] <- 24.030  
+
+quantile( hcv_set$CHE,seq(0,1,0.01))
+ hcv_set$CHE[which( hcv_set$CHE<4.5410)] <- 4.5410
+ hcv_set$CHE[which( hcv_set$CHE> 11.3620 )] <- 11.3620 
+
+quantile( hcv_set$CHOL,seq(0,1,0.01))
+ hcv_set$CHOL[which( hcv_set$CHOL<3.6270)] <- 3.6270   
+ hcv_set$CHOL[which( hcv_set$CHOL>7.2900)] <- 7.2900
+
+quantile( hcv_set$CREA,seq(0,1,0.01))
+ hcv_set$CREA[which( hcv_set$CREA<55.550)] <- 55.550 
+ hcv_set$CREA[which( hcv_set$CREA>106.000)] <- 106.000 
+
+quantile( hcv_set$GGT,seq(0,1,0.01))
+ hcv_set$GGT[which( hcv_set$GGT<10.270)] <- 10.270   
+ hcv_set$GGT[which( hcv_set$GGT>108.500)] <- 108.500 
+
+quantile( hcv_set$PROT,seq(0,1,0.01))
+ hcv_set$PROT[which( hcv_set$PROT<64.100)] <- 64.100 
+ hcv_set$PROT[which( hcv_set$PROT>80.020)] <- 80.020
+
+# normalize with min-max scaling
+# Creating function for normalizing the data between -1 to 1.
+min_max_scaling_set <- function(train) {
+  min_vals <- sapply(train, min)
+  range1 <- sapply(train, function(x)
+    diff(range(x)))
+  # scale the training data
+  
+  train_scaled <-
+    data.frame(matrix(nrow = nrow(train), ncol = ncol(train)))
+  
+  for (i in seq_len(ncol(train))) {
+    column <- (train[, i] - min_vals[i]) / range1[i]
+    train_scaled[i] <- column
+  }
+  
+  colnames(train_scaled) <- colnames(train)
+  
+  return(list(train = train_scaled))
+}
+
+# Subsetting the train and test data without categorical data
+df_set <- subset( hcv_set, select = c("ALB", "ALP", "ALT", "AST", "BIL", "CHE", 
+                                     "CHOL", "CREA","GGT", "PROT"))
+
+# Normalizing the train and test data 
+hcv_set_norm <- min_max_scaling_set(df_set)
+
+# Defining train and test data after normalization and merging dataset for 
+# making final datasets
+hcv_set_norm <- hcv_set_norm$train
+
+hcv_set_norm <- cbind(subset( hcv_set,select=c("Category", "Age")),
+                          hcv_set_norm)
+
+# square roottransformation to adjust distribution of continuous features that are 
+# still skewed after normalization for train and validation sets - ALT, AST, BIL
+# GGT
+ hcv_set_norm$ALT <- CubeRoot( hcv_set_norm$ALT)
+ hcv_set_norm$AST <- CubeRoot( hcv_set_norm$AST) 
+ hcv_set_norm$BIL <- CubeRoot( hcv_set_norm$BIL) 
+ hcv_set_norm$GGT <- CubeRoot( hcv_set_norm$GGT) 
+
+# creating equal width bins for age to convert continuous features into 
+# categorical features by binning for train and validation sets
+range( hcv_set_norm$Age)
+ hcv_set_norm$Age <- cut( hcv_set_norm$Age, 
+                      breaks = c(10,19,29,39,49,59,69,79), 
+                      include.lowest=TRUE,
+                      labels=c(10,20,30,40,50,60,70))
+ 
+# oversampling of train data by ROSE method
+hcv_set_norm <- ROSE(Category ~ ., data = hcv_set_norm, seed = 1)$data
+prop.table(table(hcv_set_norm$Category))
+
+```
+
+
+After the pre-processing of the whole dataset we will be performing a 5-fold-
+cross validation process for all of 3 models with the caret package with 3
+repetitions.
+
+```{r}
+set.seed(101)
+
+# creating train function where the k is 5 and the number of repetitions is 3
+ctrl <- trainControl(method = "repeatedcv", number = 5, repeats=3)
+
+# training the models by assigning Category as the target column and the rest of 
+# the columns as independent features
+## random forest
+rf_cv_model <- train(Category ~.,data=hcv_set_norm, method="rf",
+                     trControl= ctrl)
+rf_cv_model
+
+# Predict the test data
+pred_rf_cv <- predict(rf_cv_model, newdata = validation_data_norm)
+
+# confusion matrix
+cm_rf_cv <- confusionMatrix(reference=as.factor(validation_data_norm$Category),
+                    data=as.factor(pred_rf_cv), mode = "everything",positive='1')
+cm_rf_cv
+
+```
+
+```{r}
+# svm radial
+svm_cv_r_model <- train(Category ~.,data=hcv_set_norm, method="svmRadial",
+                     trControl= ctrl)
+svm_cv_r_model
+
+# Predict the test data
+pred_svm_cv <- predict(svm_cv_r_model, newdata = validation_data_norm)
+
+# confusion matrix
+cm_svm_cv <- confusionMatrix(reference=as.factor(validation_data_norm$Category),
+                    data=as.factor(pred_svm_cv), mode = "everything",positive='1')
+cm_svm_cv
+
+```
+
+```{r}
+# neural network 
+ann_cv_model <- train(Category ~.,data=hcv_set_norm, method="nnet",
+                     trControl= ctrl, trace=F)
+ann_cv_model
+
+# Predict the test data
+pred_ann_cv <- predict(ann_cv_model, newdata = validation_data_norm)
+
+# confusion matrix
+cm_ann_cv <- confusionMatrix(reference=as.factor(validation_data_norm$Category),
+                  data=as.factor(pred_ann_cv), mode = "everything",positive='1')
+cm_ann_cv
+
+```
+
+
+```{r}
+# data frame of metrics for the all the models
+model_cv_data <- data.frame('Model'= c('Random Forest', 'Radial SVM', 'ANN'),
+                      'Accuracy' = c(cm_rf_cv$overall['Accuracy'],
+                                     cm_svm_cv$overall['Accuracy'], 
+                                   cm_ann_cv$overall["Accuracy"]),
+                      'Precision' = c(cm_rf_cv$byClass['Precision'],
+                                     cm_svm_cv$byClass['Precision'], 
+                                   cm_ann_cv$byClass["Precision"]),
+                      'Recall' = c(cm_rf_cv$byClass['Recall'],
+                                     cm_svm_cv$byClass['Recall'], 
+                                   cm_ann_cv$byClass["Recall"]),
+                      'F1-score' = c(cm_rf_cv$byClass['F1'],
+                                     cm_svm_cv$byClass['F1'], 
+                                   cm_ann_cv$byClass["F1"]))
+
+model_cv_data
+
+```
+
+Interestingly, the metrics for random forest and radial SVM is the same. However,
+in general we can say that the metrics are higher when we perform k-fold cross-
+validation for our models than when we evaluate by the holdout method.
+
+
+## Tuning the models with available hyperparameters
+
+### RF model
+
+```{r}
+# tuning random forest model with the caret package by using 10 fold cross-
+# validation
+ctrl_tune <- trainControl(method = "cv",number = 10, selectionFunction = 'best')
+
+# grid
+grid_rf <- expand.grid(.mtry = c(2:12))
+                       
+set.seed(101)
+
+# training the tuned model
+rf_tune <- train(Category ~ ., data = train_over, method = "rf",metric = "Kappa",
+                 trControl = ctrl, tuneGrid = grid_rf)
+rf_tune
+
+# Predict the test data
+pred_rf_tune <- predict(rf_tune, newdata = validation_data_norm)
+
+# confusion matrix
+cm_rf_t <- confusionMatrix(reference=as.factor(validation_data_norm$Category),
+                  data=as.factor(pred_rf_tune), mode = "everything",positive='1')
+cm_rf_t
+
+# ROC
+roc_rf_t <- roc(as.numeric(pred_rf_tune),
+                      as.numeric(validation_data_norm$Category))
+
+# AUC 
+auc_rf_t <- auc(as.numeric(pred_rf_tune),
+                      as.numeric(validation_data_norm$Category))
+```
+
+
+### SVM radial
+
+```{r}
+set.seed(101)
+
+# train control - 10 fold cross validation
+ctrl_svm <- trainControl(method = "cv",number = 10, selectionFunction = 'best')
+
+#Train and Tune the SVM
+svm_radial_t <- train(Category ~ ., 
+                  data = train_over,
+                  method = "svmRadial",   # Radial kernel	
+                  metric="Accuracy",
+                  trControl=ctrl_svm)
+
+# Predicting using the test data
+svm_pred_radial_t <- predict(svm_radial_t, newdata = validation_data_norm)
+
+# Confusion matrix 
+cm_svm_radial_t <- confusionMatrix(reference=as.factor(validation_data_norm$Category),
+             data=as.factor(svm_pred_radial_t), mode = "everything",positive='1')
+
+cm_svm_radial_t
+
+# ROC
+roc_svm_radial_t <- roc(as.numeric(svm_pred_radial_t),
+                      as.numeric(validation_data_norm$Category))
+
+# AUC 
+auc_svm_radial_t <- auc(as.numeric(svm_pred_radial),
+                      as.numeric(validation_data_norm$Category))
+```
+
+
+### ANN 
+
+```{r}
+set.seed(101)
+
+# train control - 10 fold cross validation
+ctrl_nnet <- trainControl(method = "cv",number = 10, selectionFunction = 'best')
+
+# grid
+grid_nnet <- expand.grid(size=c(1:20), decay=c(0,0.05,0.1))
+
+#Train and Tune the SVM
+ann_t <- train(Category ~.,data=train_over, method="nnet",trControl= ctrl_nnet,
+               tuneGrid=grid_nnet, metric="Accuracy", trace=F)
+
+# predict class on validation data
+pred_nnet_t <- predict(ann_t, validation_data_norm[-1])
+
+# confusion matrix
+cm_nnet_t <- confusionMatrix(factor(pred_nnet_t),validation_data_norm$Category, 
+                           mode = "everything",positive='1')
+cm_nnet_t
+
+# ROC
+roc_nnet_t <- roc(as.numeric(pred_nnet_t), as.numeric(validation_data_norm$Category))
+
+# AUC 
+auc_nnet_t <- auc(as.numeric(pred_nnet_t), as.numeric(validation_data_norm$Category))
+
+```
+
+
+## Comparison of original models to the tuned models
+
+### Random Forest
+
+```{r}
+# data frame of metrics for the original and tuned Random Forest models
+rf_data <- data.frame('Model'= c('Original RF', 'Tuned RF'),
+                      'Accuracy' = c(cm_rf$overall['Accuracy'], 
+                                   cm_rf_t$overall["Accuracy"]),
+                      'Precision' = c(cm_rf$byClass["Precision"], 
+                                      cm_rf_t$byClass["Precision"]),
+                      'Recall' = c(cm_rf$byClass["Recall"], 
+                                      cm_rf_t$byClass["Recall"]),
+                      'F1-score' = c(cm_rf$byClass["F1"], cm_rf_t$byClass["F1"]),
+                      'AUC' = c(auc_rf, auc_rf_t))
+rf_data
+
+```
+
+
+### SVM - Radial
+
+```{r}
+# data frame of metrics for the original and tuned SVM radial models
+svm_data <- data.frame('Model'= c('Original Radial SVM', 'Tuned Radial SVM'),
+                      'Accuracy' = c(cm_svm_radial$overall['Accuracy'], 
+                                   cm_svm_radial_t$overall["Accuracy"]),
+                      'Precision' = c(cm_svm_radial$byClass["Precision"], 
+                                      cm_svm_radial_t$byClass["Precision"]),
+                      'Recall' = c(cm_svm_radial$byClass["Recall"], 
+                                      cm_svm_radial_t$byClass["Recall"]),
+                      'F1-score' = c(cm_svm_radial$byClass["F1"],
+                                     cm_svm_radial_t$byClass["F1"]),
+                      'AUC' = c(auc_svm_radial, auc_svm_radial_t))
+svm_data
+
+```
+
+
+### ANN
+
+```{r}
+# data frame of metrics for the original and tuned ANN models
+ann_data <- data.frame('Model'= c('Original ANN', 'Tuned ANN'),
+                      'Accuracy' = c(cm_nnet$overall['Accuracy'], 
+                                   cm_nnet_t$overall["Accuracy"]),
+                      'Precision' = c(cm_nnet$byClass["Precision"], 
+                                      cm_nnet_t$byClass["Precision"]),
+                      'Recall' = c(cm_nnet$byClass["Recall"], 
+                                      cm_nnet_t$byClass["Recall"]),
+                      'F1-score' = c(cm_nnet$byClass["F1"],
+                                     cm_nnet_t$byClass["F1"]),
+                      'AUC' = c(auc_nnet, auc_nnet_t))
+ann_data
+
+```
+
+
+### ROC curves of original models
+
+```{r}
+{plot(roc_nnet, col="green", lwd =2, legacy.axes=TRUE, 
+     main="Original Model's ROC curves")
+lines(roc_svm_radial, lwd =2,col="yellow")
+lines(roc_rf,col="brown")
+legend(0.2,0.5, legend=c("ANN", "SVM Radial", "RF"), col=c("green", "yellow",
+                                                           "brown"), 
+       lty=1, 
+       cex=0.8)}
+```
+
+
+### ROC curves of tuned models
+
+```{r}
+{plot(roc_nnet_t, col="green", lwd =2, legacy.axes=TRUE, 
+     main="Tuned Model's ROC curves")
+lines(roc_svm_radial_t, lwd =2,col="yellow")
+lines(roc_rf_t,col="brown")
+legend(0.2,0.5, legend=c("ANN", "SVM Radial", "RF"), col=c("green", "yellow",
+                                                           "brown"), 
+       lty=1, 
+       cex=0.8)}
+```
+
+From the original models, SVM performs the best with an accuracy of 96%, precision
+of 97%, recall of	98%	and an F1 score of 98% and an AUC of 91.62. While, from 
+the tuned models, SVM again outperforms the other models. Overall the tuned models
+perform better than their counterpart original models.
+
+# Performance Improvement
+
+## Bagging with homogenous learners
+
+```{r}
+set.seed(101)
+
+# training the model using bagging function, where coob is an out-of-bag estimate 
+# error indication, nbagg is the number of bootstrap replications.
+bag_model <- bagging(Category ~., data = train_over, coob=T, nbagg=100)
+bag_model
+
+# Predicting using the test data
+bag_preds <- predict(bag_model, newdata = validation_data_norm)
+
+# Confusion matrix 
+cm_bag <- confusionMatrix(reference=as.factor(validation_data_norm$Category),
+                    data=as.factor(bag_preds), mode = "everything",positive='1')
+
+cm_bag
+
+# ROC
+roc_bag <- roc(as.numeric(bag_preds),
+                      as.numeric(validation_data_norm$Category))
+
+# AUC 
+auc_bag <- auc(as.numeric(bag_preds),
+                      as.numeric(validation_data_norm$Category))
+```
+
+
+## Ensemble model
+
+```{r}
+# building a function that creates an ensemble model by combining the ANN, SVM
+# radial, and Random forest model from the previous parts.
+
+# This model predicts the existence of HCV in an individual based on
+# the majority vote on prediction
+
+predictHCV <- function(data) {
+  ann <- predict(ann_t, data)
+  svm <- predict(svm_radial_t, data) 
+  rf <- predict(rf_tune, newdata=data)
+  
+  majority_pred <- ifelse(ann=='1' & svm =='1', '1', 
+                          ifelse(svm=='1' & rf=='1','1',
+                                 ifelse(rf=='1' & ann=='1','1','0')))
+  return(majority_pred)
+}
+```
+
+
+To make a prediction with the ensemble model, we will take the validation set 
+to see how the ensemble model compares to the individual models in terms of 
+evaluation metrics - F1 score, Accuracy, Precision, Recall, ROC and AUC.
+
+```{r}
+set.seed(101)
+
+# Predicting using the validation data
+preds_ensemble <- predictHCV(validation_data_norm[-1])
+
+# Confusion matrix 
+cm_ens <- confusionMatrix(reference=as.factor(validation_data_norm$Category),
+                 data=as.factor(preds_ensemble), mode = "everything",positive='1')
+
+cm_ens
+
+# ROC
+roc_ens <- roc(as.numeric(preds_ensemble),
+                      as.numeric(validation_data_norm$Category))
+
+# AUC 
+auc_ens <- auc(as.numeric(preds_ensemble),
+                      as.numeric(validation_data_norm$Category))
+```
+
+
+## Comparison of ensemble model to individual tuned models
+
+```{r}
+# data frame of metrics for the ensemble and tuned Random Forest models
+rf_ens_data <- data.frame('Model'= c('Ensemble', 'Tuned RF'),
+                      'Accuracy' = c(cm_ens$overall['Accuracy'], 
+                                   cm_rf_t$overall["Accuracy"]),
+                      'Precision' = c(cm_ens$byClass["Precision"], 
+                                      cm_rf_t$byClass["Precision"]),
+                      'Recall' = c(cm_ens$byClass["Recall"], 
+                                      cm_rf_t$byClass["Recall"]),
+                      'F1-score' = c(cm_ens$byClass["F1"], cm_rf_t$byClass["F1"]),
+                      'AUC' = c(auc_ens, auc_rf_t))
+rf_ens_data
+
+```
+
+
+```{r}
+# data frame of metrics for the ensemble and tuned SVM radial models
+svm_ens_data <- data.frame('Model'= c('Ensemble', 'Tuned SVM'),
+                      'Accuracy' = c(cm_ens$overall['Accuracy'], 
+                                   cm_svm_radial_t$overall["Accuracy"]),
+                      'Precision' = c(cm_ens$byClass["Precision"], 
+                                      cm_svm_radial_t$byClass["Precision"]),
+                      'Recall' = c(cm_ens$byClass["Recall"], 
+                                      cm_svm_radial_t$byClass["Recall"]),
+                      'F1-score' = c(cm_ens$byClass["F1"], cm_svm_radial_t$byClass["F1"]),
+                      'AUC' = c(auc_ens, auc_svm_radial_t))
+svm_ens_data
+
+```
+
+
+```{r}
+# data frame of metrics for the ensemble and tuned ANN models
+ann_ens_data <- data.frame('Model'= c('Ensemble', 'Tuned ANN'),
+                      'Accuracy' = c(cm_ens$overall['Accuracy'], 
+                                   cm_nnet_t$overall["Accuracy"]),
+                      'Precision' = c(cm_ens$byClass["Precision"], 
+                                      cm_nnet_t$byClass["Precision"]),
+                      'Recall' = c(cm_ens$byClass["Recall"], 
+                                      cm_nnet_t$byClass["Recall"]),
+                      'F1-score' = c(cm_ens$byClass["F1"], cm_nnet_t$byClass["F1"]),
+                      'AUC' = c(auc_ens, auc_nnet_t))
+ann_ens_data
+
+```
+
+### ROC curves of tuned individual models vs ensemble model
+
+```{r}
+{plot(roc_ens, col="red", lwd =4, legacy.axes=TRUE, 
+     main="Tuned Models vs ensemble ROC curves")
+  lines(roc_nnet_t, col="black")
+  lines(roc_svm_radial_t, lwd =2,col="black")
+  lines(roc_rf_t,col="black")
+  legend(0.2,0.5, legend=c("Ensemble"), col=c("red"), 
+         lty=1, 
+         cex=0.8)}
+```
+
+Comparing the ensemble model to the individual models in terms of metrics, the 
+ensemble model performs better than the tuned random forest model, similar to the 
+tuned ANN model and slightly lower than the tuned SVM model, in terms of our
+chosen metrics. This shows that using tuned SVM with radial kernel or ensemble 
+would be the best choice for this dataset.
+
+The bagging model, with an accuracy of 95%, Precision of 98%, Recall of 96%,
+F1 of 97% also shows a similarity to the ensemble model.
+
+
+
+# References
+
+Dua, D. and Graff, C. (2019). UCI Machine Learning Repository
+[http://archive.ics.uci.edu/ml]. Irvine, CA: University of California, School of
+Information and Computer Science.
+
+
+
+
+
